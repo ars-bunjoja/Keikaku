@@ -1,0 +1,24 @@
+{
+  "name": "keikaku",
+  "version": "1.0.0",
+  "description": "A material requirement planning system",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "install": "npm install",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "material",
+    "requirement",
+    "planning",
+    "system"
+  ],
+  "author": "ARS",
+  "license": "ISC",
+  "dependencies": {
+    "arima": "^0.2.5",
+    "sequelize": "^6.37.1",
+    "sqlite3": "^5.1.7"
+  }
+}
