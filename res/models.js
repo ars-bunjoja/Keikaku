@@ -14,12 +14,12 @@ const Item = sequelize.define('Item', {
     price: {
         type: DataTypes.NUMBER
     },
-    leadTime: {
-        type: DataTypes.NUMBER
-    },
-    maxLeadTime: {
-        type: DataTypes.NUMBER
-    }
+    // leadTime: {
+    //     type: DataTypes.NUMBER
+    // },
+    // maxLeadTime: {
+    //     type: DataTypes.NUMBER
+    // }
 }, { sequelize });
 
 const Product = sequelize.define('Product', {

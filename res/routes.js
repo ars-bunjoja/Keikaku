@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { Item, Product, ProductItem, DailyData } = require('./models');
+const { itemsList } = require('./utils');
 
 
 router.get('', (req, res) => {
@@ -13,6 +14,20 @@ router.get('', (req, res) => {
         },
         error: false
     });
+})
+
+
+router.post('/input', async (req, res) => {
+    // Sale: Total Branch Sale
+    // Consumption: List Of Each Product Sold
+    
+    let itemsThatUsedInProducts = await itemsList(req.body.products);
+    itemsThatUsedInProducts.sort();
+
+    res.json({
+        data: req.body,
+        error: false
+    })
 })
 
 
@@ -42,8 +57,6 @@ router.get('/items', async (req, res) => {
         error: false
     });
 })
-
-
 
 
 // Product
@@ -101,6 +114,38 @@ router.get('/product', async (req, res) => {
         error: false
     })
 })
+router.get('/products', async (req, res) => {
+    let products = await Product.findAll();
+    for(let i = 0; i < products.length; i++) {
+        let productItems = await ProductItem.findAll({
+            where: {
+                productID: products[i].id
+            }
+        });
+        products[i] = {
+            id: products[i].id,
+            name: products[i].name,
+            price: products[i].price,
+            items: []
+        };
+        for(let j = 0; j < productItems.length; j++) {
+            let item = await Item.findByPk(productItems[j].itemID);
+            products[i].items.push({
+                id: item.id,
+                name: item.name,
+                qty: productItems[j].quantity,
+                price: item.price,
+                final_price: item.price * productItems[j].quantity
+            })
+        }
+    }
+    return res.json({
+        data: products,
+        error: false
+    })
+})
+
+
 
 
 // DailyData
