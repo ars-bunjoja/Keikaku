@@ -1,6 +1,6 @@
 const router = require('express').Router();
-const { Item, Product, ProductItem, DailyData } = require('./models');
-const { itemsList } = require('./utils');
+const { Item, Product, ProductItem, DailyData, ItemData } = require('./models');
+const { itemsList, itemConsumption, productRatio, decreaseStock } = require('./utils');
 
 
 router.get('', (req, res) => {
@@ -21,11 +21,36 @@ router.post('/input', async (req, res) => {
     // Sale: Total Branch Sale
     // Consumption: List Of Each Product Sold
     
+    let productsRatio = [];
+    for(let i = 0; i < req.body.products.length; i++) {
+        let ratio = await productRatio(req.body.products[i], req.body.sale);
+        productsRatio.push({
+            product: req.body.products[i].id,
+            ratio: ratio
+        });
+    }
+    
     let itemsThatUsedInProducts = await itemsList(req.body.products);
-    itemsThatUsedInProducts.sort();
+    itemsThatUsedInProducts = itemsThatUsedInProducts.filter((item, index) => itemsThatUsedInProducts.indexOf(item) === index);
+    let itemsConsumption = [];
+    for(let i = 0; i < itemsThatUsedInProducts.length; i++) {
+        let consumption = await itemConsumption(itemsThatUsedInProducts[i], req.body.products);
+        let [StockDays, Stock, ReorderLevel, SafetyStock] = await decreaseStock(itemsThatUsedInProducts[i], consumption);
+        let today = new Date();
+        today.setDate(today.getDate() + StockDays);
+        let po_qty = (SafetyStock+ReorderLevel) - Stock;
+        itemsConsumption.push({
+            id: itemsThatUsedInProducts[i], 
+            consumption: consumption,
+            pos: [{qty: po_qty, date: today}]
+        });
+    }
 
     res.json({
-        data: req.body,
+        data: {
+            productsRatio: productsRatio,
+            itemsConsumption: itemsConsumption
+        },
         error: false
     })
 })
@@ -36,13 +61,26 @@ router.post('/input', async (req, res) => {
 router.post('/item', async (req, res) => {
     let item = await Item.create({
         name: req.body.name,
-        price: req.body.price
+        price: req.body.price,
+        maxLeadTime: req.body.maxLT,
+        avgLeadTime: req.body.avgLT,
+        stock: req.body.stock
     });
     return res.json({
         data: item,
         error: false
     });
-})
+});
+router.post('/itemData', async (req, res) => {
+    let item_data = await ItemData.create({
+        itemID: req.body.itemID,
+        consumption: req.body.consumption
+    })
+    return res.json({
+        data: item_data,
+        error: false
+    })
+});
 router.get('/item', async (req, res) => {
     let item = await Item.findByPk(req.query.id);
     return res.json({

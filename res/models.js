@@ -9,17 +9,26 @@ const Item = sequelize.define('Item', {
         autoIncrement: true
     },
     name: {
-        type: DataTypes.STRING
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true
     },
     price: {
-        type: DataTypes.NUMBER
+        type: DataTypes.NUMBER,
+        allowNull: false
     },
-    // leadTime: {
-    //     type: DataTypes.NUMBER
-    // },
-    // maxLeadTime: {
-    //     type: DataTypes.NUMBER
-    // }
+    stock: {
+        type: DataTypes.NUMBER,
+        allowNull: false
+    },
+    leadTime: {
+        type: DataTypes.NUMBER,
+        allowNull: false
+    },
+    maxLeadTime: {
+        type: DataTypes.NUMBER,
+        allowNull: false
+    }
 }, { sequelize });
 
 const Product = sequelize.define('Product', {
@@ -30,10 +39,13 @@ const Product = sequelize.define('Product', {
         autoIncrement: true
     },
     name: {
-        type: DataTypes.STRING
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true
     },
     price: {
-        type: DataTypes.NUMBER
+        type: DataTypes.NUMBER,
+        allowNull: false
     }
 }, { sequelize });
 
@@ -46,16 +58,19 @@ const ProductItem = sequelize.define('ProductItem', {
     },
     productID: {
         type: DataTypes.INTEGER,
+        allowNull: false,
         references: {
             model: Product,
             key: 'id'
         }
     },
     quantity: {
-        type: DataTypes.INTEGER
+        type: DataTypes.INTEGER,
+        allowNull: false
     },
     itemID: {
         type: DataTypes.INTEGER,
+        allowNull: false,
         references: {
             model: Item,
             key: 'id'
@@ -63,8 +78,7 @@ const ProductItem = sequelize.define('ProductItem', {
     }
 }, { sequelize });
 
-
-const DailyData = sequelize.define('dailyData', {
+const DailyData = sequelize.define('DailyData', {
     id: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -72,13 +86,29 @@ const DailyData = sequelize.define('dailyData', {
         autoIncrement: true
     },
     sales: {
-        type: DataTypes.NUMBER
+        type: DataTypes.NUMBER,
+        allowNull: false
+    }
+});
+
+const ItemData = sequelize.define('ItemData', {
+    id: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        primaryKey: true,
+        autoIncrement: true
     },
     consumption: {
-        type: DataTypes.NUMBER
+        type: DataTypes.NUMBER,
+        allowNull: false
     },
-    stock: {
-        type: DataTypes.NUMBER
+    safetyStock: {
+        type: DataTypes.NUMBER,
+        allowNull: false
+    },
+    reorderLevel: {
+      type: DataTypes.NUMBER,
+      allowNull: false  
     },
     itemID: {
         type: DataTypes.INTEGER,
@@ -88,9 +118,8 @@ const DailyData = sequelize.define('dailyData', {
         }
     }
 })
-// Item.hasMany(dailyData);
-DailyData.belongsTo(Item, { foreignKey: 'itemID' });
 
+ItemData.belongsTo(Item, { foreignKey: 'itemID' });
 Product.belongsToMany(Item, {
     foreignKey: 'productID',
     through: ProductItem
@@ -99,7 +128,4 @@ Item.belongsToMany(Product, {
     foreignKey: 'itemID',
     through: ProductItem
 });
-
-
-// sequelize.sync({ force: true });
-module.exports = { Item, Product, ProductItem, DailyData };
+module.exports = { Item, Product, ProductItem, DailyData, ItemData, sequelize };
