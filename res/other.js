@@ -1,5 +1,4 @@
-const { ItemData } = require('./models');
-const { decreaseStock } = require('./utils');
+const { ItemData, DailyData } = require('./models');
 
 
 async function addI(c) {
@@ -11,4 +10,8 @@ async function addI(c) {
     })
 }
 
-decreaseStock(1, 5)
+async function addSales(sale) {
+    await DailyData.create({
+        sales: sale
+    })
+}

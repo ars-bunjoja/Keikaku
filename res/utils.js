@@ -6,89 +6,131 @@ function is_int(value) {
     return !isNaN(value) && (parseFloat(value) == parseInt(value))
 }
 
-function safetyStock(maxSale, maxLT, avgSale, avgLT) {
-    return (maxSale*maxLT) - (avgSale*avgLT);
+function safety_stock(maxSale, maxLT, avgSale, avgLT) {
+    return (maxSale * maxLT) - (avgSale * avgLT);
 }
 
-function reorderLevel(avgSale, avgLT, stockLevel) {
-    return (avgSale*avgLT) + stockLevel;
+function reorder_level(avgSale, avgLT, stockLevel) {
+    return (avgSale * avgLT) + stockLevel;
 }
 
-function optimumLevel(safetyStock, reorderLevel) {
+function optimum_level(safetyStock, reorderLevel) {
     return (safetyStock + reorderLevel);
 }
 
-async function productRatio(productID, totalSales) {
-    let product = await Product.findByPk(productID.id);
-    return Math.round(((product.price*productID.qty)/totalSales)*100);
+async function products_ratio(products, totalSales) {
+    let productsRatio = [];
+    for (let i = 0; i < products.length; i++) {
+        let product = await Product.findByPk(products[i].id);
+        let productRatio = Math.round(((product.price * products[i].qty) / totalSales) * 100);
+        productsRatio.push({
+            product: products[i].id,
+            ratio: productRatio
+        });
+    }
+    return productsRatio;
 }
 
-async function itemsList(products) {
+async function items_list(products) {
     let items = [];
-    for(let i = 0; i < products.length; i++) {
+    for (let i = 0; i < products.length; i++) {
         let productItems = await ProductItem.findAll({
             where: {
                 productID: products[i].id
             }
         })
-        for(let j = 0; j < productItems.length; j++) {
+        for (let j = 0; j < productItems.length; j++) {
             items.push(productItems[j].itemID);
         }
     }
     return items;
 }
 
-async function itemConsumption(itemID, products) {
+async function item_consumption(itemID, products) {
     let consumption = 0;
-    for(let i = 0; i < products.length; i++) {
+    for (let i = 0; i < products.length; i++) {
         let productItems = await ProductItem.findAll({
             where: {
                 productID: products[i].id
             }
         })
-        for(let j = 0; j < productItems.length; j++) {
-            if(productItems[j].itemID == itemID) {
-                consumption += (productItems[j].quantity*products[i].qty);
+        for (let j = 0; j < productItems.length; j++) {
+            if (productItems[j].itemID == itemID) {
+                consumption += (productItems[j].quantity * products[i].qty);
             }
         }
     }
     return consumption;
 }
 
-async function decreaseStock(itemID, qty) {
+async function decrease_stock(itemID, qty, safetyStock, reorderLevel) {
     let item = await Item.findByPk(itemID);
     item.stock = item.stock - qty;
     await item.save();
+
+    await ItemData.create({
+        consumption: qty,
+        itemID: itemID,
+        safetyStock: safetyStock,
+        reorderLevel: reorderLevel
+    });
+}
+
+async function add_sale(sale) {
+    await DailyData.create({
+        sales: sale
+    })
+}
+
+async function get_mrp_variables(itemID, lastConsumption) {
+    let item = await Item.findByPk(itemID);
     let previousConsumptions = await ItemData.findAll({
         where: {
             itemID: itemID
         }
     });
-
-    await ItemData.create({
-        consumption: qty,
-        itemID: itemID,
-        safetyStock: 0,
-        reorderLevel: 0
-    });
-
-    if(previousConsumptions.length == 0) {
+    if (previousConsumptions.length == 0) {
         return [0, 0, 0, 0];
     }
-
+    previousConsumptions.push({consumption: lastConsumption});
     previousConsumptions.sort((a, b) => a.consumption - b.consumption);
-    console.log(previousConsumptions);
     let totalConsumption = 0;
-    for(let i = 0; i < previousConsumptions.length; i++) {
+    for (let i = 0; i < previousConsumptions.length; i++) {
         totalConsumption += previousConsumptions[i].consumption;
     }
-    let maxConsumption = previousConsumptions[previousConsumptions.length-1].dataValues.consumption;
-    let avgConsumption = totalConsumption/previousConsumptions.length;
-    let SafetyStock = safetyStock(maxConsumption, item.maxLeadTime, avgConsumption, item.leadTime);
-    let ReorderLevel = reorderLevel(avgConsumption, item.leadTime, SafetyStock);
-    let consumptionTimeInDays = ReorderLevel/avgConsumption;
+    let maxConsumption = previousConsumptions[previousConsumptions.length - 1].consumption;
+    let avgConsumption = totalConsumption / previousConsumptions.length;
+    let safetyStock = safety_stock(maxConsumption, item.maxLeadTime, avgConsumption, item.leadTime);
+    let reorderLevel = reorder_level(avgConsumption, item.leadTime, safetyStock);
+    let consumptionTimeInDays = reorderLevel / avgConsumption;
     let currentStock = item.stock;
-    return [consumptionTimeInDays, currentStock, ReorderLevel, SafetyStock];
+    await decrease_stock(itemID, lastConsumption, safetyStock, reorderLevel);
+    return [consumptionTimeInDays, currentStock, reorderLevel, safetyStock];
 }
 
-module.exports = { is_int, itemsList, itemConsumption, productRatio, decreaseStock };
+
+async function generate_po(productsList, sale, po_date) {
+    let productsRatio = await products_ratio(productsList, sale);
+    let itemsThatUsedInProducts = await items_list(productsList);
+    itemsThatUsedInProducts = itemsThatUsedInProducts.filter((item, index) => itemsThatUsedInProducts.indexOf(item) === index);
+    let itemsConsumption = [];
+    for (let i = 0; i < itemsThatUsedInProducts.length; i++) {
+        let consumption = await item_consumption(itemsThatUsedInProducts[i], productsList);
+        let [stockDays, currentStock, reorderLevel, safetyStock] = await get_mrp_variables(itemsThatUsedInProducts[i]);
+        po_date.setDate(po_date.getDate() + stockDays);
+        let po_qty = (safetyStock + reorderLevel) - currentStock;
+        itemsConsumption.push({
+            id: itemsThatUsedInProducts[i],
+            consumption: consumption,
+            po: { qty: po_qty, date: po_date }
+        });
+    }
+    return [productsRatio, itemsConsumption];
+}
+
+async function hidden_layer() {
+    let previousSales = await DailyData.findAll();
+    
+};
+
+module.exports = { is_int, generate_po };
