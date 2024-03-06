@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { Item, Product, ProductItem, DailyData, ItemData } = require('./models');
-const { itemsList, itemConsumption, productRatio, decreaseStock } = require('./utils');
+const { generate_po } = require('./utils');
 
 
 router.get('', (req, res) => {
@@ -21,36 +21,25 @@ router.post('/input', async (req, res) => {
     // Sale: Total Branch Sale
     // Consumption: List Of Each Product Sold
     
-    let productsRatio = [];
-    for(let i = 0; i < req.body.products.length; i++) {
-        let ratio = await productRatio(req.body.products[i], req.body.sale);
-        productsRatio.push({
-            product: req.body.products[i].id,
-            ratio: ratio
-        });
-    }
-    
-    let itemsThatUsedInProducts = await itemsList(req.body.products);
-    itemsThatUsedInProducts = itemsThatUsedInProducts.filter((item, index) => itemsThatUsedInProducts.indexOf(item) === index);
-    let itemsConsumption = [];
-    for(let i = 0; i < itemsThatUsedInProducts.length; i++) {
-        let consumption = await itemConsumption(itemsThatUsedInProducts[i], req.body.products);
-        let [StockDays, Stock, ReorderLevel, SafetyStock] = await decreaseStock(itemsThatUsedInProducts[i], consumption);
-        let today = new Date();
-        today.setDate(today.getDate() + StockDays);
-        let po_qty = (SafetyStock+ReorderLevel) - Stock;
-        itemsConsumption.push({
-            id: itemsThatUsedInProducts[i], 
-            consumption: consumption,
-            pos: [{qty: po_qty, date: today}]
-        });
-    }
+    let [productsRatio, itemsConsumption] = await generate_po(req.body.products, req.body.sale, new Date());
 
     res.json({
         data: {
             productsRatio: productsRatio,
             itemsConsumption: itemsConsumption
         },
+        error: false
+    })
+});
+
+
+router.post('/sales', async (req, res) => {
+    let dailyData = await DailyData.create({
+        sales: req.body.sales
+    });
+    await dailyData.save();
+    return res.json({
+        data: dailyData,
         error: false
     })
 })
