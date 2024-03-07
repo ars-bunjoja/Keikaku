@@ -23,7 +23,7 @@ async function products_ratio(products, totalSales) {
     let productsRatio = [];
     for (let i = 0; i < products.length; i++) {
         let product = await Product.findByPk(products[i].id);
-        let productRatio = Math.round((product.price * products[i].qty) / totalSales);
+        let productRatio = ((product.price * products[i].qty) / totalSales);
         productsRatio.push({
             product: products[i].id,
             ratio: productRatio
@@ -143,9 +143,10 @@ async function generate_po(productsList, lastStockDates) {
 
 async function hidden_layer(productsList, current_sale) {
     let purchaseOrders = [];
+    await add_sale(current_sale);
     let previousSales = await DailyData.findAll();
     previousSales = previousSales.map(x => x.sales);
-    previousSales.push(current_sale);
+    // previousSales.push(current_sale);
     let futureSales = p_arima(previousSales);
     let productsRatio = await products_ratio(productsList, current_sale);
     let currentItemsDate = []
@@ -158,4 +159,4 @@ async function hidden_layer(productsList, current_sale) {
     return purchaseOrders;
 };
 
-module.exports = { is_int, hidden_layer };
+module.exports = { is_int, hidden_layer, item_consumption, items_list, products_ratio };

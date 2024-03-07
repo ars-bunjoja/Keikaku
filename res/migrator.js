@@ -92,8 +92,12 @@ async function BomCsvMigrate(data) {
     }
 }
 
-async function main() {
+async function migrate() {
     await sequelize.sync({ force: true });
     await BomCsvMigrate(bom);
 }
 // main();
+
+module.exports = {
+    migrate
+}
