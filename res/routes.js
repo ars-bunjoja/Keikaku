@@ -1,6 +1,7 @@
 const router = require('express').Router();
 const { Item, Product, ProductItem, DailyData, ItemData } = require('./models');
-const { hidden_layer } = require('./utils');
+const { hidden_layer, item_consumption, items_list, products_ratio } = require('./utils');
+const { migrate } = require('./migrator');
 
 
 router.get('', (req, res) => {
@@ -17,9 +18,26 @@ router.get('', (req, res) => {
 })
 
 
+router.post('/migrate-bom', async (req, res) => {
+    if (req.body.bom) {
+        await migrate();
+        return res.json({
+            data: {
+                message: "Success"
+            },
+            error: false
+        })
+    }
+    return res.json({
+        data: {
+            message: "Failed"
+        },
+        error: true
+    })
+})
+
+
 router.post('/input', async (req, res) => {
-    // Sale: Total Branch Sale
-    // Consumption: List Of Each Product Sold
     let pos = await hidden_layer(req.body.products, req.body.sale);
     res.json({
         data: {
@@ -41,6 +59,36 @@ router.post('/sales', async (req, res) => {
     })
 })
 
+
+router.post("/consumption", async (req, res) => {
+    let products = req.body.products;
+    if(products.length == 0){
+        return res.json({
+            data: [],
+            error: false
+        })
+    }
+    let productsRatio = await products_ratio(products, req.body.sales);
+    let itemsThatUsedInProducts = await items_list(products);
+    let itemsConsumption = [];
+    for (let i = 0; i < itemsThatUsedInProducts.length; i++) {
+        let item = await Item.findByPk(itemsThatUsedInProducts[i]);
+        let consumption = await item_consumption(itemsThatUsedInProducts[i], products)
+        itemsConsumption.push({
+            id: itemsThatUsedInProducts[i],
+            name: item.name,
+            price: item.price * consumption,
+            consumption: consumption
+        })
+    }
+    return res.json({
+        data: {
+            items: itemsConsumption,
+            products: productsRatio
+        },
+        error: false
+    })
+})
 
 
 // Item
@@ -96,7 +144,7 @@ router.post('/product', async (req, res) => {
         price: product.price,
         items: []
     }
-    for(let i = 0; i < req.body.items.length; i++) {
+    for (let i = 0; i < req.body.items.length; i++) {
         let productItem = await ProductItem.create({
             productID: product.id,
             itemID: Number(req.body.items[i].id),
@@ -123,7 +171,7 @@ router.get('/product', async (req, res) => {
         price: product.price,
         items: []
     };
-    for(let i = 0; i < productItems.length; i++) {
+    for (let i = 0; i < productItems.length; i++) {
         let item = await Item.findByPk(productItems[i].itemID);
         product.items.push({
             id: item.id,
@@ -140,7 +188,7 @@ router.get('/product', async (req, res) => {
 })
 router.get('/products', async (req, res) => {
     let products = await Product.findAll();
-    for(let i = 0; i < products.length; i++) {
+    for (let i = 0; i < products.length; i++) {
         let productItems = await ProductItem.findAll({
             where: {
                 productID: products[i].id
@@ -152,7 +200,7 @@ router.get('/products', async (req, res) => {
             price: products[i].price,
             items: []
         };
-        for(let j = 0; j < productItems.length; j++) {
+        for (let j = 0; j < productItems.length; j++) {
             let item = await Item.findByPk(productItems[j].itemID);
             products[i].items.push({
                 id: item.id,
