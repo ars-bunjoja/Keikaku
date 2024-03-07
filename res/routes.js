@@ -1,6 +1,6 @@
 const router = require('express').Router();
 const { Item, Product, ProductItem, DailyData, ItemData } = require('./models');
-const { generate_po } = require('./utils');
+const { hidden_layer } = require('./utils');
 
 
 router.get('', (req, res) => {
@@ -20,13 +20,10 @@ router.get('', (req, res) => {
 router.post('/input', async (req, res) => {
     // Sale: Total Branch Sale
     // Consumption: List Of Each Product Sold
-    
-    let [productsRatio, itemsConsumption] = await generate_po(req.body.products, req.body.sale, new Date());
-
+    let pos = await hidden_layer(req.body.products, req.body.sale);
     res.json({
         data: {
-            productsRatio: productsRatio,
-            itemsConsumption: itemsConsumption
+            pos: pos
         },
         error: false
     })

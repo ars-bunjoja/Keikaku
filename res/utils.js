@@ -1,5 +1,6 @@
 const { DataTypes } = require('sequelize');
 const { ProductItem, Product, Item, DailyData, ItemData } = require('./models');
+const { p_arima } = require('./forecasting');
 
 
 function is_int(value) {
@@ -22,13 +23,26 @@ async function products_ratio(products, totalSales) {
     let productsRatio = [];
     for (let i = 0; i < products.length; i++) {
         let product = await Product.findByPk(products[i].id);
-        let productRatio = Math.round(((product.price * products[i].qty) / totalSales) * 100);
+        let productRatio = Math.round((product.price * products[i].qty) / totalSales);
         productsRatio.push({
             product: products[i].id,
             ratio: productRatio
         });
     }
     return productsRatio;
+}
+
+async function products_quantity(sale, products_ratio) {
+    let productsQunatities = [];
+    for (let i = 0; i < products_ratio.length; i++) {
+        let product = await Product.findByPk(products_ratio[i].id);
+        let productQuantity = Math.round((sale * products_ratio[i].ratio) / product.price);
+        productsQunatities.push({
+            product: products_ratio[i].id,
+            quantity: productQuantity
+        })
+    }
+    return productsQunatities
 }
 
 async function items_list(products) {
@@ -43,7 +57,7 @@ async function items_list(products) {
             items.push(productItems[j].itemID);
         }
     }
-    return items;
+    return items.filter((value, index, self) => self.indexOf(value) === index);
 }
 
 async function item_consumption(itemID, products) {
@@ -92,7 +106,7 @@ async function get_mrp_variables(itemID, lastConsumption) {
     if (previousConsumptions.length == 0) {
         return [0, 0, 0, 0];
     }
-    previousConsumptions.push({consumption: lastConsumption});
+    previousConsumptions.push({ consumption: lastConsumption });
     previousConsumptions.sort((a, b) => a.consumption - b.consumption);
     let totalConsumption = 0;
     for (let i = 0; i < previousConsumptions.length; i++) {
@@ -109,28 +123,39 @@ async function get_mrp_variables(itemID, lastConsumption) {
 }
 
 
-async function generate_po(productsList, sale, po_date) {
-    let productsRatio = await products_ratio(productsList, sale);
+async function generate_po(productsList, lastStockDates) {
     let itemsThatUsedInProducts = await items_list(productsList);
-    itemsThatUsedInProducts = itemsThatUsedInProducts.filter((item, index) => itemsThatUsedInProducts.indexOf(item) === index);
     let itemsConsumption = [];
     for (let i = 0; i < itemsThatUsedInProducts.length; i++) {
         let consumption = await item_consumption(itemsThatUsedInProducts[i], productsList);
-        let [stockDays, currentStock, reorderLevel, safetyStock] = await get_mrp_variables(itemsThatUsedInProducts[i]);
-        po_date.setDate(po_date.getDate() + stockDays);
+        let [stockDays, currentStock, reorderLevel, safetyStock] = await get_mrp_variables(itemsThatUsedInProducts[i], consumption);
+        let thisItemDate = lastStockDates[i].filter(x => x.id == itemsThatUsedInProducts[i]) || new Date();
+        thisItemDate.setDate(thisItemDate.getDate() + stockDays);
         let po_qty = (safetyStock + reorderLevel) - currentStock;
         itemsConsumption.push({
             id: itemsThatUsedInProducts[i],
             consumption: consumption,
-            po: { qty: po_qty, date: po_date }
+            po: { qty: po_qty, date: thisItemDate }
         });
     }
-    return [productsRatio, itemsConsumption];
+    return itemsConsumption;
 }
 
-async function hidden_layer() {
+async function hidden_layer(productsList, current_sale) {
+    let purchaseOrders = [];
     let previousSales = await DailyData.findAll();
-    
+    previousSales = previousSales.map(x => x.sales);
+    previousSales.push(current_sale);
+    let futureSales = p_arima(previousSales);
+    let productsRatio = await products_ratio(productsList, current_sale);
+    let currentItemsDate = []
+    for (let i = 0; i < futureSales.length; i++) {
+        let productsQuantity = await products_quantity(futureSales[i], productsRatio);
+        let purchaseOrder = await generate_po(productsQuantity);
+        currentItemsDate = purchaseOrder.map(x => [x.id, x.po.date]);
+        purchaseOrders.push(purchaseOrder);
+    }
+    return purchaseOrders;
 };
 
-module.exports = { is_int, generate_po };
+module.exports = { is_int, hidden_layer };
