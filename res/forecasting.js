@@ -2,9 +2,6 @@ const ARIMA = require('arima')
 const { DailyData } = require('./models');
 
 function p_arima(ts) {
-    // const ts = [108700,126150,106820,128970,124470,108950,123110,115480,
-    //             115540,122710,127020,127260,154480,105840,101270,103160,138620,
-    //             115800,111260,100540];
     const sarimax = new ARIMA({
         p: 2,
         d: 0,

@@ -38,7 +38,7 @@ router.post('/migrate-bom', async (req, res) => {
 
 
 router.post('/input', async (req, res) => {
-    let pos = await hidden_layer(req.body.products, req.body.sale);
+    let pos = await hidden_layer(req.body.products, req.body.sales);
     res.json({
         data: {
             pos: pos
