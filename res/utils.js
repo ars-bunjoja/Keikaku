@@ -23,9 +23,9 @@ async function products_ratio(products, totalSales) {
     let productsRatio = [];
     for (let i = 0; i < products.length; i++) {
         let product = await Product.findByPk(products[i].id);
-        let productRatio = ((product.price * products[i].qty) / totalSales);
+        let productRatio = ((product.dataValues.price * products[i].qty) / totalSales);
         productsRatio.push({
-            product: products[i].id,
+            id: products[i].id,
             ratio: productRatio
         });
     }
@@ -36,9 +36,9 @@ async function products_quantity(sale, products_ratio) {
     let productsQunatities = [];
     for (let i = 0; i < products_ratio.length; i++) {
         let product = await Product.findByPk(products_ratio[i].id);
-        let productQuantity = Math.round((sale * products_ratio[i].ratio) / product.price);
+        let productQuantity = Math.round((sale * products_ratio[i].ratio) / product.dataValues.price);
         productsQunatities.push({
-            product: products_ratio[i].id,
+            id: products_ratio[i].id,
             quantity: productQuantity
         })
     }
@@ -57,7 +57,8 @@ async function items_list(products) {
             items.push(productItems[j].itemID);
         }
     }
-    return items.filter((value, index, self) => self.indexOf(value) === index);
+    items = items.filter((value, index, self) => self.indexOf(value) === index);
+    return items;
 }
 
 async function item_consumption(itemID, products) {
@@ -70,7 +71,7 @@ async function item_consumption(itemID, products) {
         })
         for (let j = 0; j < productItems.length; j++) {
             if (productItems[j].itemID == itemID) {
-                consumption += (productItems[j].quantity * products[i].qty);
+                consumption += (productItems[j].quantity * products[i].quantity);
             }
         }
     }
@@ -118,7 +119,7 @@ async function get_mrp_variables(itemID, lastConsumption) {
     let reorderLevel = reorder_level(avgConsumption, item.leadTime, safetyStock);
     let consumptionTimeInDays = reorderLevel / avgConsumption;
     let currentStock = item.stock;
-    await decrease_stock(itemID, lastConsumption, safetyStock, reorderLevel);
+    // await decrease_stock(itemID, lastConsumption, safetyStock, reorderLevel);
     return [consumptionTimeInDays, currentStock, reorderLevel, safetyStock];
 }
 
@@ -129,7 +130,7 @@ async function generate_po(productsList, lastStockDates) {
     for (let i = 0; i < itemsThatUsedInProducts.length; i++) {
         let consumption = await item_consumption(itemsThatUsedInProducts[i], productsList);
         let [stockDays, currentStock, reorderLevel, safetyStock] = await get_mrp_variables(itemsThatUsedInProducts[i], consumption);
-        let thisItemDate = lastStockDates[i].filter(x => x.id == itemsThatUsedInProducts[i]) || new Date();
+        let thisItemDate = lastStockDates.length > 0 ? lastStockDates.find(x => x[0] == itemsThatUsedInProducts[i])[1] : new Date();
         thisItemDate.setDate(thisItemDate.getDate() + stockDays);
         let po_qty = (safetyStock + reorderLevel) - currentStock;
         itemsConsumption.push({
@@ -143,16 +144,16 @@ async function generate_po(productsList, lastStockDates) {
 
 async function hidden_layer(productsList, current_sale) {
     let purchaseOrders = [];
-    await add_sale(current_sale);
     let previousSales = await DailyData.findAll();
     previousSales = previousSales.map(x => x.sales);
-    // previousSales.push(current_sale);
+    // await add_sale(current_sale);
+    previousSales.push(current_sale);
     let futureSales = p_arima(previousSales);
     let productsRatio = await products_ratio(productsList, current_sale);
     let currentItemsDate = []
     for (let i = 0; i < futureSales.length; i++) {
         let productsQuantity = await products_quantity(futureSales[i], productsRatio);
-        let purchaseOrder = await generate_po(productsQuantity);
+        let purchaseOrder = await generate_po(productsQuantity, currentItemsDate);
         currentItemsDate = purchaseOrder.map(x => [x.id, x.po.date]);
         purchaseOrders.push(purchaseOrder);
     }
