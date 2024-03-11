@@ -129,14 +129,22 @@ async function generate_po(productsList, lastStockDates) {
     let itemsConsumption = [];
     for (let i = 0; i < itemsThatUsedInProducts.length; i++) {
         let consumption = await item_consumption(itemsThatUsedInProducts[i], productsList);
+        let item = await Item.findByPk(itemsThatUsedInProducts[i]);
         let [stockDays, currentStock, reorderLevel, safetyStock] = await get_mrp_variables(itemsThatUsedInProducts[i], consumption);
+        
         let thisItemDate = lastStockDates.length > 0 ? lastStockDates.find(x => x[0] == itemsThatUsedInProducts[i])[1] : new Date();
-        thisItemDate.setDate(thisItemDate.getDate() + stockDays);
+        let poDate = new Date(thisItemDate.getTime()); 
+        poDate.setDate(poDate.getDate() + stockDays);
+
         let po_qty = (safetyStock + reorderLevel) - currentStock;
+        let date_lead = new Date(poDate.getTime());
+        date_lead.setDate(date_lead.getDate() + item.leadTime);
+
         itemsConsumption.push({
             id: itemsThatUsedInProducts[i],
+            name: item.name,
             consumption: consumption,
-            po: { qty: po_qty, date: thisItemDate }
+            po: { qty: po_qty, date: poDate, leadTime: item.leadTime, date_lead: date_lead }
         });
     }
     return itemsConsumption;
